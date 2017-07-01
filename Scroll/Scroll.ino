@@ -40,43 +40,52 @@
 // include the library code:
 #include <LiquidCrystal.h>
 
+// TODO: Ticker tape for longer messages
+
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7,8,9,10,11,12);
+#define DISPLAY_WIDTH 16
+#define DELAY 1000
+#define SCROLL_DELAY 250
 
+String lcdMessage = "Balshaw's Boat !";
 void setup() {
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   // Print a message to the LCD.
-  lcd.print("hello, world!");
-  delay(1000);
+  lcd.print(lcdMessage.c_str());
+  lcd.print(lcdMessage.c_str());
+  delay(5*DELAY);
 }
 
 void loop() {
   // scroll 13 positions (string length) to the left
   // to move it offscreen left:
-  for (int positionCounter = 0; positionCounter < 13; positionCounter++) {
+  int msgLen = lcdMessage.length();
+  
+  for (int positionCounter = 0; positionCounter <= msgLen; positionCounter++) {
     // scroll one position left:
     lcd.scrollDisplayLeft();
     // wait a bit:
-    delay(150);
+    delay(SCROLL_DELAY);
   }
 
   // scroll 29 positions (string length + display length) to the right
   // to move it offscreen right:
-  for (int positionCounter = 0; positionCounter < 29; positionCounter++) {
+  for (int positionCounter = 0; positionCounter <= msgLen + DISPLAY_WIDTH; positionCounter++) {
     // scroll one position right:
     lcd.scrollDisplayRight();
     // wait a bit:
-    delay(150);
+    delay(SCROLL_DELAY);
   }
 
   // scroll 16 positions (display length + string length) to the left
   // to move it back to center:
-  for (int positionCounter = 0; positionCounter < 16; positionCounter++) {
+  for (int positionCounter = 0; positionCounter <= DISPLAY_WIDTH; positionCounter++) {
     // scroll one position left:
     lcd.scrollDisplayLeft();
     // wait a bit:
-    delay(150);
+    delay(SCROLL_DELAY);
   }
 
   // delay at the end of the full loop:
