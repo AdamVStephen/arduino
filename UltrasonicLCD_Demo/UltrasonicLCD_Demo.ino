@@ -64,14 +64,19 @@ static float sim_level = 25.0;
    P (Pa) = rho * g * h
 */
 
+// 3 levels of trace 0-3 (0 = off)
+#define DEBUG_TRACE 0
+
 #define VCC 5.0
-#define MAX_KPA 10000.0
+#define MAX_KPA 10.0
 #define COEFF_LIN_KPA 0.09
 #define COEFF_OFFSET_KPA 0.04
 // Min Vout 0.2 for standard values above
-#define MIN_VOUT (VCC * COEFF_OFFSET_KPA)
+//#define MIN_VOUT (VCC * COEFF_OFFSET_KPA)
+static const float MIN_VOUT = (VCC * COEFF_OFFSET_KPA);
 // Max Vout 4.7 for standard values above
-#define MAX_VOUT (VCC * ((COEFF_LIN_KPA * MAX_KPA) + COEFF_OFFSET_KPA))
+//#define MAX_VOUT (VCC * ((COEFF_LIN_KPA * MAX_KPA) + COEFF_OFFSET_KPA))
+static const float MAX_VOUT = (VCC * ((COEFF_LIN_KPA * MAX_KPA) + COEFF_OFFSET_KPA));
 
 // Physical constants
 // Gravitational acceleration ms^-2
@@ -118,8 +123,8 @@ float kpaToLevelCentimeters(float kpa) {
   return (100.0 * kpaToLevelMeters(kpa));
 }
 
-float digitalToLevelCentimeters(long d) {
-  return kpaToLevelCentimeters(voutToKpa(digitalToVout(d)));
+int digitalToLevelCentimeters(long d) {
+  return int(kpaToLevelCentimeters(voutToKpa(digitalToVout(d))));
 }
 
 
@@ -175,7 +180,6 @@ byte level_0[8] = {
   0b00000
 };
 
-byte level_00[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 byte level_01[8] = {0, 0, 0, 0, 0, 0, 0, 31};
 byte level_02[8] = {0, 0, 0, 0, 0, 0, 31, 31};
 byte level_03[8] = {0, 0, 0, 0, 0, 31, 31, 31};
@@ -186,24 +190,20 @@ byte level_07[8] = {0, 31, 31, 31, 31, 31, 31, 31};
 byte level_08[8] = {31, 31, 31, 31, 31, 31, 31, 31};
 
 
-byte level_1[8] = {
-  0b00000,
-  0b00000,
-  0b00000,
-  0b00000,
-  0b00000,
-  0b00000,
-  0b00000,
-  0b11111
-};
 
+/**
+     Display arithmetic
+*/
 
+char topTitle[] = "H20 (cm) :";
+int topTitleLen = String(topTitle).length();
 
 /**
    Setup -----------------------------------------------------------------------------------
 */
+char dbugbuf[50];
 
-static int loops = 0;
+static int loops = 4695 - 30;
 
 void setup() {
   Serial.begin(9600);
@@ -212,28 +212,34 @@ void setup() {
   // use a for loop to initialize each pin as an output:
   showConversions();
   // create a new character
-  lcd.createChar(0, level_00);
+  lcd.createChar(0, level_01);
   // create a new character
-  lcd.createChar(1, level_01);
+  lcd.createChar(1, level_02);
   // create a new character
-  lcd.createChar(2, level_02);
+  lcd.createChar(2, level_03);
   // create a new character
-  lcd.createChar(3, level_03);
+  lcd.createChar(3, level_04);
   // create a new character
-  lcd.createChar(4, level_04);
+  lcd.createChar(4, level_05);
   // create a new character
-  lcd.createChar(5, level_05);
+  lcd.createChar(5, level_06);
   // create a new character
-  lcd.createChar(6, level_06);
+  lcd.createChar(6, level_07);
   // create a new character
-  lcd.createChar(7, level_07);
-  // create a new character
-  lcd.createChar(8, level_08);
+  lcd.createChar(7, level_08);
 
   lcd.begin(16, 2);
+
   // Print a message to the LCD.
-  lcd.setCursor(0, 0);
-  lcd.print("H20 (cm) : ");
+  //lcd.setCursor(0, 0);
+  //lcd.print("H20 (cm) : ");
+#if DEBUG_TRACE
+  Serial.println("WaterLevel meter (arduino) : trace debug ON");
+  Serial.println("Top Line Title");
+  Serial.println(topTitle);
+  sprintf("topTitle length = %d chars", toptTitleLen);
+  Serial.println(dbugbuf);
+#endif
   pinMode(13, OUTPUT);
 
 }
@@ -243,7 +249,24 @@ void setup() {
 */
 
 int pressureBar(int d) {
-  return map(digitalToVout(d), MIN_VOUT, MAX_VOUT, 0, 8);
+
+#if DEBUG_TRACE
+  char sbuf[50];
+  sprintf(sbuf, "d %d v %f range %f - %f map 0,8", d, String(digitalToVout(d)).c_str(), String(MIN_VOUT).c_str(), String(MAX_VOUT).c_str());
+  Serial.println(sbuf);
+  Serial.print(digitalToVout(d));
+  Serial.println();
+  Serial.print(MIN_VOUT);
+  Serial.println();
+  Serial.print(MAX_VOUT);
+  Serial.println();
+#endif
+
+  return constrain(map(digitalToVout(d), MIN_VOUT, MAX_VOUT, 0, 7), 0, 7);
+}
+
+int heightBar(int h) {
+  return constrain(map(h, 0, 50, 0, 7), 0, 7);
 }
 
 char  serbuf[50];
@@ -257,72 +280,115 @@ void lcdHelp() {
     "Options for help"
     "Press s to set  ",
     "Press r to reset",
-    "Press c to calib"
+    "Press c to calib",
+    "                "
   };
   for (int i = 0; i < 4; i++) {
     lcd.setCursor(0, 1);
     lcd.print(messages[i]);
-    delay(4000);
+    delay(2000);
   }
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
 }
 
-
+static int hlo = 100;
+static int hhi = 0;
+const int numReadings = 10;
+int readings[numReadings];
+int readIndex = 0;
+int total = 0;
+int hav = 0;
 
 void loop() {
 
   loops++;
 
-  // set the cursor to column 0, line 1
-  // (note: line 1 is the second row, since counting begins with 0):
-  //lcd.setCursor(6, 1);
-  //lcd.print("    ");
-  //lcd.setCursor(6, 1);
-  // print the number of seconds since reset:
-  //lcd.print(millis() / 1000);
-  //a = sr04.Distance();
-  // a = 50.; //levelToVoltage(5.0);
-  //lcd.print(a);
-  
-  if (a < min) {
-    digitalWrite(13, HIGH);
-  } else {
-    digitalWrite(13, LOW);
-  }
+  // Top Line
+  lcd.setCursor(topTitleLen + 1, 0);
+  lcd.print("   ");
+  lcd.setCursor(topTitleLen + 1, 0);
+#if DEBUG_TRACE
+  float ll = loops * 1.0;
+  lcd.print(String(ll).c_str());
+  Serial.println("Loop counter from loop");
+  Serial.println(String(ll).c_str());
+#else
 
   int a0value;
   a0value = analogRead(0);
-  int pbar = pressureBar(a0value);
+  int h = digitalToLevelCentimeters(a0value);
+  lcd.setCursor(0, 0);
+  sprintf(lcdbuf0, "%s%02d", topTitle, h);
+  lcd.print(lcdbuf0);
+  //lcd.print(h);
+  int hbar = heightBar(h);
+  lcd.setCursor(topTitleLen + 2 + 1, 0);
+  lcd.write((byte)hbar);
 
-  sprintf(serbuf, "Analogue value %d Bar %d", a0value, pbar);
+  int j = loops % 8;
+  lcd.setCursor(15, 0);
+  lcd.write((byte)(7 - j));
+  lcd.setCursor(15, 1);
+  lcd.write((byte)(7 - j));
+
+  // Update statistics
+  if (h < hlo) {
+    hlo = h;
+  }
+  if (h > hhi) {
+    hhi = h;
+  }
+  total = total - readings[readIndex];
+  readings[readIndex] = h;
+  total = total + readings[readIndex];
+  readIndex = (readIndex + 1) % numReadings;
+  float av = total / numReadings;
+  hav = (int) av;
+  sprintf(lcdbuf1, "%02d-%02d Avg %02d", hlo, hhi, hav);
+  lcd.setCursor(0, 1);
+  lcd.print(lcdbuf1);
+  int avbar = heightBar(hav);
+  lcd.setCursor(13, 1);
+  lcd.write((byte)avbar);
+
+  sprintf(serbuf, "Analogue value %d Bar %d", a0value, avbar);
   Serial.println(serbuf);
 
-  lcd.setCursor(13,0);
-  lcd.write((byte)pbar);  
-  lcd.setCursor(14, 0);
-  lcd.print(pbar);
-  lcd.setCursor(15,0);
-  lcd.write((byte)'A');
+#endif
 
-  //  showConversions();
-  delay(500);
-  // Turn off the blinking cursor:
-  lcd.noBlink();
-  // delay(3000);
-  // Turn on the blinking cursor:
-  lcd.blink();
-  // delay(3000);
-  
-  //lcd.setCursor(0, 1);
-  //for (int i = 0; i < 9; i++) {
-  //  lcd.write((byte)i);
- // }
-  //delay(2000);
+  int tms = millis();
+  int uptimeSS = tms / 1000;
+  int uptimeMM = uptimeSS % 60;
+  int uptimeHH = uptimeSS / 3600;
 
-  if (loops % 15 == 0) {
+  if (loops % 50 == 0) {
     lcdHelp();
-  } else {
-    lcd.setCursor(0,1);
-    sprintf(lcdbuf1,"Loops : %d", loops);
+  } else if (loops % 37 == 0) {
+    lcd.setCursor(0, 1);
+    sprintf(lcdbuf1, "%04d %02d:%02d      ", loops, uptimeHH, uptimeSS);
     lcd.print(lcdbuf1);
+    delay(3000);
+  } else if (loops %  1729 == 0) {
+    lcd.setCursor(0, 1);
+    lcd.print("1729 : Ramanujan");
+    delay(2000);
+    lcd.setCursor(0, 1);
+    lcd.print("=1^3 + 12^3     ");
+    delay(2000);
+    lcd.setCursor(0, 1);
+    lcd.print("=9^3 + 10^3     ");
+    delay(2000);
+  } else if (loops % 4695 == 0) {
+    lcd.setCursor(0, 1);
+    lcd.print("HappyBoatingNick");
+    delay(2000);
   }
+
+  Serial.print(loops);
+  delay(1000);
+  if (loops > 9999) {
+    loops = 0;
+  }
+  return;
 }
