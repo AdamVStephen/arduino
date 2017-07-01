@@ -59,7 +59,7 @@ static float sim_level = 25.0;
    Sensor Transformations
 
    Range 0.2V = 0 kPa to 4.7V = 10.0 kPa
-   A0 is 12 bit 0-1023 ADC
+   A0 is 12 bit 0-1023
 
    P (Pa) = rho * g * h
 */
@@ -203,6 +203,8 @@ byte level_1[8] = {
    Setup -----------------------------------------------------------------------------------
 */
 
+static int loops = 0;
+
 void setup() {
   Serial.begin(9600);
 
@@ -240,8 +242,36 @@ void setup() {
    Loop -----------------------------------------------------------------------------------
 */
 
+int pressureBar(int d) {
+  return map(digitalToVout(d), MIN_VOUT, MAX_VOUT, 0, 8);
+}
+
+char  serbuf[50];
+char lcdbuf0[16];
+char lcdbuf1[16];
+
+
+void lcdHelp() {
+  char buf[16] = "0123456789ABCEF";
+  char * messages[] = {
+    "Options for help"
+    "Press s to set  ",
+    "Press r to reset",
+    "Press c to calib"
+  };
+  for (int i = 0; i < 4; i++) {
+    lcd.setCursor(0, 1);
+    lcd.print(messages[i]);
+    delay(4000);
+  }
+}
+
+
 
 void loop() {
+
+  loops++;
+
   // set the cursor to column 0, line 1
   // (note: line 1 is the second row, since counting begins with 0):
   //lcd.setCursor(6, 1);
@@ -252,22 +282,47 @@ void loop() {
   //a = sr04.Distance();
   // a = 50.; //levelToVoltage(5.0);
   //lcd.print(a);
+  
   if (a < min) {
     digitalWrite(13, HIGH);
   } else {
     digitalWrite(13, LOW);
   }
-  showConversions();
-  delay(250);
+
+  int a0value;
+  a0value = analogRead(0);
+  int pbar = pressureBar(a0value);
+
+  sprintf(serbuf, "Analogue value %d Bar %d", a0value, pbar);
+  Serial.println(serbuf);
+
+  lcd.setCursor(13,0);
+  lcd.write((byte)pbar);  
+  lcd.setCursor(14, 0);
+  lcd.print(pbar);
+  lcd.setCursor(15,0);
+  lcd.write((byte)'A');
+
+  //  showConversions();
+  delay(500);
   // Turn off the blinking cursor:
   lcd.noBlink();
-  delay(3000);
+  // delay(3000);
   // Turn on the blinking cursor:
   lcd.blink();
-  delay(3000);
-  lcd.setCursor(0, 1);
-  for (int i = 0; i < 9; i++) {
-    lcd.write((byte)i);
+  // delay(3000);
+  
+  //lcd.setCursor(0, 1);
+  //for (int i = 0; i < 9; i++) {
+  //  lcd.write((byte)i);
+ // }
+  //delay(2000);
 
+  if (loops % 15 == 0) {
+    lcdHelp();
+  } else {
+    lcd.setCursor(0,1);
+    sprintf(lcdbuf1,"Loops : %d", loops);
+    lcd.print(lcdbuf1);
   }
 }
